@@ -1,0 +1,9 @@
+*.tfstate
+*.tfstate.backup
+.terraform/
+.vscode
+*.swp
+*.log
+*.bak
+.git
+license.json

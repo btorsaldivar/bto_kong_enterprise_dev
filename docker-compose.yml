@@ -1,0 +1,143 @@
+version: '3.7'
+
+volumes:
+  kong_data: {}
+
+networks:
+  kong-net:
+    external: false
+
+services:
+  #######################################
+  # Kong database migration bootstrap
+  #######################################
+  kong-migrations:
+    image: "${KONG_DOCKER_TAG:-kong:latest}"
+    #command: kong migrations bootstrap -v
+    command: sh -c "echo sleeping 6s && sleep 6s && kong migrations bootstrap -v"
+    #depends_on:
+    #  - db
+    environment:
+      KONG_DATABASE: "${KONG_DATABASE:-postgres}"
+      KONG_PG_HOST: "${KONG_PG_HOST:-db}"
+      KONG_PG_USER: "${KONG_PG_USER:-kong}"
+      KONG_PG_PASSWORD: "${KONG_PG_PASSWORD:-kong}"
+      KONG_PASSWORD: "${KONG_PASSWORD:-kong}"
+      KONG_LICENSE_DATA: $KONG_LICENSE_DATA
+      #KONG_PG_PASSWORD_FILE: /run/secrets/kong_postgres_password
+    networks:
+      - "${KONG_NET:-kong-net}"
+    volumes:
+      - './license.json:/etc/kong/license.json:ro'
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  #######################################
+  # Kong database migration UP
+  #######################################
+  kong-migrations-up:
+    image: "${KONG_DOCKER_TAG:-kong:latest}"
+    #command: kong migrations up -v && kong migrations finish -v
+    command: sh -c "echo sleeping 20s && sleep 20s && kong migrations up -v && sleep 5s && kong migrations finish -v"
+    #depends_on:
+    #  - db
+    #  - kong-migrations
+    environment:
+      KONG_DATABASE: "postgres"
+      KONG_PG_HOST: "db"
+      KONG_PG_USER: "kong"
+      KONG_PG_PASSWORD: "kong"
+      KONG_PASSWORD: "kong"
+      KONG_LICENSE_DATA: $KONG_LICENSE_DATA
+      #KONG_PG_PASSWORD_FILE: /run/secrets/kong_postgres_password
+    networks:
+      - ${KONG_NET:-kong-net}
+    volumes:
+      - './license.json:/etc/kong/license.json:ro'
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  kong:
+    image: ${KONG_DOCKER_TAG:-kong:latest}
+    container_name: kong-ee
+    user: "${KONG_USER:-kong}"
+    command: sh -c "echo sleeping 70s && sleep 70s && kong start -v"
+    #command: kong start -v
+    depends_on:
+      - db
+      - kong-migrations
+      - kong-migrations-up
+    environment:
+      KONG_DATABASE: "postgres"
+      KONG_PG_HOST: "db"
+      KONG_PG_PASSWORD: "kong"
+      KONG_PROXY_ACCESS_LOG: "${KONG_PROXY_ACCESS_LOG}"
+      KONG_ADMIN_ACCESS_LOG: "${KONG_ADMIN_ACCESS_LOG}"
+      KONG_PROXY_ERROR_LOG: "${KONG_PROXY_ERROR_LOG}"
+      KONG_ADMIN_ERROR_LOG: "${KONG_ADMIN_ERROR_LOG}"
+      KONG_ADMIN_LISTEN: ${KONG_ADMIN_LISTEN}
+      KONG_ADMIN_GUI_URL: ${KONG_ADMIN_GUI_URL}
+      KONG_STATUS_LISTEN: ${KONG_STATUS_LISTEN}
+      KONG_ENFORCE_RBAC: ${KONG_ENFORCE_RBAC}
+      KONG_ADMIN_GUI_AUTH: ${KONG_ADMIN_GUI_AUTH}
+      KONG_GUI_SESSION_CONF: '${KONG_GUI_SESSION_CONF}'
+      KONG_ADMIN_GUI_SESSION_CONF: '${KONG_ADMIN_GUI_SESSION_CONF}'
+      #KONG_LICENSE_DATA: $KONG_LICENSE_DATA
+      KONG_VITALS: "on"
+      KONG_VITALS_STRATEGY: "database"
+      KONG_PORTAL: "on"
+      KONG_PORTAL_GUI_HOST: ${KONG_PORTAL_GUI_HOST}
+      KONG_PORTAL_AUTH: ${KONG_PORTAL_AUTH}
+      KONG_PORTAL_AUTH_CONF: '${KONG_PORTAL_AUTH_CONF}'
+      KONG_PORTAL_SESSION_CONF: '${KONG_PORTAL_SESSION_CONF}'
+      KONG_ANONYMOUS_REPORTS: "off"
+    networks:
+      - ${KONG_NET:-kong-net}
+    volumes:
+      - './license.json:/etc/kong/license.json:ro'
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+      - "8001:8001"
+      - "8444:8444"
+      - "8002:8002"
+      - "8445:8445"
+      - "8003:8003"
+      - "8004:8004"
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  db:
+    image: postgres:9.6
+    container_name: db
+    environment:
+      POSTGRES_DB: ${KONG_PG_DATABASE:-kong}
+      POSTGRES_USER: ${KONG_PG_USER:-kong}
+      POSTGRES_PASSWORD: ${KONG_PG_PASSWORD:-kong}
+      #POSTGRES_PASSWORD_FILE: /run/secrets/kong_postgres_password
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${KONG_PG_USER:-kong}"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+    stdin_open: true
+    tty: true
+    networks:
+      - ${KONG_NET:-kong-net}
+    volumes:
+      - kong_data:/var/lib/postgresql/data
