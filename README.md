@@ -1,7 +1,3 @@
-# Kong in Docker Compose
-
-This is the official Docker Compose template for [Kong][kong-site-url].
-
 # What is Kong?
 
 You can find the official Docker distribution for Kong at [https://hub.docker.com/_/kong](https://hub.docker.com/_/kong).
